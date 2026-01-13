@@ -1,5 +1,4 @@
 const net = require("net");
-const path = require("path");
 const { spawn } = require("child_process");
 
 const args = process.argv.slice(2);
@@ -40,14 +39,9 @@ const findOpenPort = async () => {
 
 const resolveNextBin = () => {
   try {
-    const nextPackage = require.resolve("next/package.json", {
-      paths: [process.cwd()],
-    });
-    const binDir = path.join(path.dirname(nextPackage), "..", ".bin");
-    const binName = process.platform === "win32" ? "next.cmd" : "next";
-    return path.join(binDir, binName);
+    return require.resolve("next/dist/bin/next", { paths: [process.cwd()] });
   } catch {
-    return "next";
+    return null;
   }
 };
 
@@ -77,7 +71,10 @@ const run = async () => {
     nextArgs.push("-H", host);
   }
 
-  const child = spawn(nextBin, nextArgs, {
+  const command = nextBin ? process.execPath : "npx";
+  const commandArgs = nextBin ? [nextBin, ...nextArgs] : ["next", ...nextArgs];
+
+  const child = spawn(command, commandArgs, {
     stdio: "inherit",
     env: { ...process.env, PORT: String(port) },
   });
