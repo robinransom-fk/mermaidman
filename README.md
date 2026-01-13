@@ -125,6 +125,9 @@ Copy-Item -Recurse -Force pkg/* ../../public/wasm/
 Allow nodes to contain diagrams by storing an embedded Mermaidman payload:
 
 ```mermaid
+graph TD
+A[Subflow]
+
 %% @node: A {
 %%   "uid":"n_1",
 %%   "x":120,
