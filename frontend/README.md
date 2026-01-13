@@ -9,6 +9,14 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+### Auto-port options
+The dev script will scan for an open port (default 3000→3020) and start Next on the first available port.
+
+```powershell
+# Start scanning from 4000 up to 4010
+npm run dev -- --port 4000 --max 4010
+```
+
 ## WASM Engine (Asset Pattern)
 The Rust engine is built with `wasm-pack` and copied into `public/wasm` to avoid Turbopack/Webpack wasm module issues.
 
