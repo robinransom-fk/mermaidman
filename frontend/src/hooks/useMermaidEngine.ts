@@ -13,8 +13,8 @@ export function useMermaidEngine() {
         const wasmModule = await import(/* webpackIgnore: true */ '/wasm/mermaidman_engine.js');
         const init = wasmModule.default;
 
-        // Initialize with the binary path
-        await init('/wasm/mermaidman_engine_bg.wasm');
+        // Initialize with the binary path (new-style init object avoids deprecation warnings)
+        await init({ module_or_path: '/wasm/mermaidman_engine_bg.wasm' });
 
         setEngineFunctions({
           parse_mermaidman: wasmModule.parse_mermaidman,

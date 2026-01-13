@@ -7,6 +7,8 @@ import ReactFlow, {
     Background,
     BackgroundVariant,
     Controls,
+    Handle,
+    Position,
     type NodeProps,
     useNodesState,
     useEdgesState,
@@ -69,10 +71,20 @@ function MermaidNode({ data, selected }: NodeProps<MermaidNodeData>) {
     return (
         <div
             className={cn(
-                "min-w-[140px] max-w-[260px] border-2 border-black bg-white p-3 shadow-[4px_4px_0px_0px_#000]",
+                "relative min-w-[140px] max-w-[260px] border-2 border-black bg-white p-3 shadow-[4px_4px_0px_0px_#000]",
                 selected ? "ring-2 ring-black ring-offset-2" : "ring-0"
             )}
         >
+            <Handle
+                type="target"
+                position={Position.Left}
+                className="!h-2 !w-2 !rounded-none !border-2 !border-black !bg-white"
+            />
+            <Handle
+                type="source"
+                position={Position.Right}
+                className="!h-2 !w-2 !rounded-none !border-2 !border-black !bg-black"
+            />
             <div className="flex items-center justify-between gap-2">
                 <div className="text-sm font-semibold">{data.label}</div>
                 {kind && (
@@ -100,6 +112,8 @@ function MermaidNode({ data, selected }: NodeProps<MermaidNodeData>) {
     );
 }
 
+const NODE_TYPES = { mermaidNode: MermaidNode };
+
 function MermaidEditorContent() {
     const { isReady, parse_mermaidman } = useMermaidEngine();
     const [code, setCode] = useState(INITIAL_CODE);
@@ -115,7 +129,6 @@ function MermaidEditorContent() {
     const [currentTitle, setCurrentTitle] = useState('Main');
     const [currentParentNodeId, setCurrentParentNodeId] = useState<string | undefined>(undefined);
     const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-    const nodeTypes = useMemo(() => ({ mermaidNode: MermaidNode }), []);
     const selectedNode = useMemo(
         () => nodes.find((node) => node.id === selectedNodeId) as Node<MermaidNodeData> | undefined,
         [nodes, selectedNodeId]
@@ -493,7 +506,7 @@ function MermaidEditorContent() {
                     <ReactFlow
                         nodes={nodes}
                         edges={edges}
-                        nodeTypes={nodeTypes}
+                        nodeTypes={NODE_TYPES}
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
                         onNodeDragStop={onNodeDragStop}
