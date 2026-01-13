@@ -17,7 +17,7 @@ Mermaidman is a Next.js 16 + Rust/WASM visual editor for Mermaid-style flowchart
 ## Mermaidman Syntax (Backwards Compatible)
 Mermaid stays clean; metadata is stored in comments:
 
-```mermaid
+```text
 graph TD
 A[Start] --> B[Processing]
 B --> C[End]
@@ -124,7 +124,7 @@ Copy-Item -Recurse -Force pkg/* ../../public/wasm/
 ### Nested Mermaidman diagrams
 Allow nodes to contain diagrams by storing an embedded Mermaidman payload:
 
-```mermaid
+```text
 graph TD
 A[Subflow]
 

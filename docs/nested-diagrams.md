@@ -10,7 +10,7 @@ This spec defines how Mermaidman supports diagrams embedded inside nodes. The go
 ## Data Model
 Nested diagrams are stored inside `%% @node:` JSON as a `diagram` object:
 
-```mermaid
+```text
 graph TD
 A[Subflow]
 
