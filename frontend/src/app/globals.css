@@ -3,6 +3,14 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --color-card: #ffffff;
+  --color-muted: #f5f5f5;
+  --color-popover: #ffffff;
+  --color-border: #111111;
+  --color-primary: #111111;
+  --color-primary-foreground: #ffffff;
+  --color-muted-foreground: #4b5563;
+  --color-ring: #111111;
 }
 
 @theme inline {
@@ -20,7 +28,107 @@
 }
 
 body {
-  background: var(--background);
+  background: linear-gradient(180deg, #fff7e6 0%, #f7f2ff 100%);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist-sans), "Outfit", "Space Grotesk", sans-serif;
+}
+
+.bg-card {
+  background-color: var(--color-card);
+}
+
+.bg-muted {
+  background-color: var(--color-muted);
+}
+
+.bg-popover {
+  background-color: var(--color-popover);
+}
+
+.bg-primary {
+  background-color: var(--color-primary);
+}
+
+.text-foreground {
+  color: var(--foreground);
+}
+
+.text-muted-foreground {
+  color: var(--color-muted-foreground);
+}
+
+.text-primary-foreground {
+  color: var(--color-primary-foreground);
+}
+
+.border-border {
+  border-color: var(--color-border);
+}
+
+.ring-ring {
+  --tw-ring-color: var(--color-ring);
+}
+
+.border-3 {
+  border-width: 3px;
+}
+
+.border-t-3 {
+  border-top-width: 3px;
+}
+
+.border-r-3 {
+  border-right-width: 3px;
+}
+
+.border-l-3 {
+  border-left-width: 3px;
+}
+
+.shadow-brutal-sm {
+  box-shadow: 2px 2px 0 0 rgba(0, 0, 0, 1);
+}
+
+.shadow-brutal {
+  box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 1);
+}
+
+.shadow-brutal-md {
+  box-shadow: 4px 4px 0 0 rgba(0, 0, 0, 1);
+}
+
+.shadow-brutal-lg {
+  box-shadow: 6px 6px 0 0 rgba(0, 0, 0, 1);
+}
+
+.shadow-brutal-xl {
+  box-shadow: 8px 8px 0 0 rgba(0, 0, 0, 1);
+}
+
+.shadow-brutal-red {
+  box-shadow: 4px 4px 0 0 rgba(239, 68, 68, 1);
+}
+
+.shadow-brutal-blue {
+  box-shadow: 4px 4px 0 0 rgba(59, 130, 246, 1);
+}
+
+.shadow-brutal-yellow {
+  box-shadow: 4px 4px 0 0 rgba(245, 158, 11, 1);
+}
+
+.brutal-gradient-purple {
+  background: linear-gradient(135deg, #c084fc 0%, #7c3aed 100%);
+}
+
+.brutal-gradient-blue {
+  background: linear-gradient(135deg, #93c5fd 0%, #2563eb 100%);
+}
+
+.brutal-gradient-red {
+  background: linear-gradient(135deg, #fca5a5 0%, #dc2626 100%);
+}
+
+.brutal-gradient-yellow {
+  background: linear-gradient(135deg, #fde68a 0%, #f59e0b 100%);
 }

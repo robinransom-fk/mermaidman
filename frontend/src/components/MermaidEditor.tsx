@@ -19,6 +19,19 @@ import { useMermaidEngine } from '@/hooks/useMermaidEngine';
 import { getLayoutedNodes } from '@/utils/layout';
 import { upsertNodeDirective } from '@/utils/mermaidman';
 import { cn } from '@/utils/cn';
+import { Badge } from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Badge';
+import { Breadcrumbs, type BreadcrumbItem } from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Breadcrumbs';
+import { Button } from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Button';
+import {
+    Card,
+    CardContent,
+    CardDescription,
+    CardHeader,
+    CardTitle,
+} from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Card';
+import { Divider } from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Divider';
+import { Input } from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Input';
+import { Textarea } from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Textarea';
 import {
     createGraphStore,
     moveNode,
@@ -69,12 +82,7 @@ function MermaidNode({ data, selected }: NodeProps<MermaidNodeData>) {
     const codePreview = data.codePreview;
 
     return (
-        <div
-            className={cn(
-                "relative min-w-[140px] max-w-[260px] border-2 border-black bg-white p-3 shadow-[4px_4px_0px_0px_#000]",
-                selected ? "ring-2 ring-black ring-offset-2" : "ring-0"
-            )}
-        >
+        <div className="relative">
             <Handle
                 type="target"
                 position={Position.Left}
@@ -85,29 +93,38 @@ function MermaidNode({ data, selected }: NodeProps<MermaidNodeData>) {
                 position={Position.Right}
                 className="!h-2 !w-2 !rounded-none !border-2 !border-black !bg-black"
             />
-            <div className="flex items-center justify-between gap-2">
-                <div className="text-sm font-semibold">{data.label}</div>
-                {kind && (
-                    <span className="rounded border border-black px-2 py-0.5 text-[9px] font-semibold uppercase tracking-widest">
-                        {kind}
-                    </span>
+            <Card
+                padding="sm"
+                shadow={selected ? "lg" : "sm"}
+                className={cn(
+                    "min-w-[160px] max-w-[260px] bg-card",
+                    selected ? "ring-2 ring-black ring-offset-2" : "ring-0"
                 )}
-            </div>
-            {data.diagramPreview && (
-                <div className="mt-2 border border-black bg-yellow-50 px-2 py-1 text-[10px] uppercase tracking-wide">
-                    {data.diagramPreview}
+            >
+                <div className="flex items-center justify-between gap-2">
+                    <div className="text-sm font-black">{data.label}</div>
+                    {kind && (
+                        <Badge variant="outline" color="gray" size="sm">
+                            {kind}
+                        </Badge>
+                    )}
                 </div>
-            )}
-            {codePreview && (
-                <pre className="mt-2 max-h-28 overflow-hidden whitespace-pre-wrap rounded border border-black bg-black px-2 py-1 text-[10px] text-green-200">
-                    {codePreview}
-                </pre>
-            )}
-            {hasDiagram && (
-                <div className="mt-2 text-[9px] uppercase tracking-widest text-slate-500">
-                    Double-click to open
-                </div>
-            )}
+                {data.diagramPreview && (
+                    <div className="mt-2 border-2 border-border bg-muted px-2 py-1 text-[10px] uppercase tracking-wide">
+                        {data.diagramPreview}
+                    </div>
+                )}
+                {codePreview && (
+                    <pre className="mt-2 max-h-28 overflow-hidden whitespace-pre-wrap border-2 border-border bg-black px-2 py-1 text-[10px] text-green-200">
+                        {codePreview}
+                    </pre>
+                )}
+                {hasDiagram && (
+                    <div className="mt-2 text-[9px] uppercase tracking-widest text-muted-foreground">
+                        Double-click to open
+                    </div>
+                )}
+            </Card>
         </div>
     );
 }
@@ -262,6 +279,31 @@ function MermaidEditorContent() {
         [diagramStack, currentTitle]
     );
 
+    const navigateToBreadcrumb = useCallback((index: number) => {
+        if (index < 0 || index >= breadcrumbs.length - 1) return;
+        let nextCode = code;
+        let nextParentNodeId = currentParentNodeId;
+        let nextTitle = currentTitle;
+        let nextStack = [...diagramStack];
+
+        while (nextStack.length > index) {
+            const parent = nextStack[nextStack.length - 1];
+            if (!nextParentNodeId) break;
+            nextCode = upsertNodeDirective(parent.code, nextParentNodeId, {
+                diagram: { mermaidman: nextCode },
+            });
+            nextParentNodeId = parent.parentNodeId;
+            nextTitle = parent.title;
+            nextStack = nextStack.slice(0, -1);
+        }
+
+        setDiagramStack(nextStack);
+        setCurrentTitle(nextTitle);
+        setCurrentParentNodeId(nextParentNodeId);
+        setSelectedNodeId(null);
+        setCode(nextCode);
+    }, [breadcrumbs.length, code, currentParentNodeId, currentTitle, diagramStack]);
+
     const openNestedDiagram = useCallback((node: Node<MermaidNodeData>) => {
         const meta = node.data?.meta;
         const diagram = meta?.diagram as DiagramMeta | undefined;
@@ -298,17 +340,9 @@ function MermaidEditorContent() {
     }, [code, currentTitle, currentParentNodeId]);
 
     const navigateUp = useCallback(() => {
-        if (diagramStack.length === 0 || !currentParentNodeId) return;
-        const parent = diagramStack[diagramStack.length - 1];
-        const updatedParentCode = upsertNodeDirective(parent.code, currentParentNodeId, {
-            diagram: { mermaidman: code },
-        });
-        setDiagramStack((prev) => prev.slice(0, -1));
-        setCurrentTitle(parent.title);
-        setCurrentParentNodeId(parent.parentNodeId);
-        setSelectedNodeId(null);
-        setCode(updatedParentCode);
-    }, [diagramStack, currentParentNodeId, code]);
+        if (diagramStack.length === 0) return;
+        navigateToBreadcrumb(diagramStack.length - 1);
+    }, [diagramStack.length, navigateToBreadcrumb]);
 
     const updateSelectedNodeMeta = useCallback((patch: Record<string, unknown>) => {
         if (!selectedNode) return;
@@ -324,6 +358,15 @@ function MermaidEditorContent() {
     const selectedDiagram = selectedMeta.diagram as DiagramMeta | undefined;
     const selectedCode = selectedMeta.code as CodeMeta | undefined;
 
+    const breadcrumbItems = useMemo<BreadcrumbItem[]>(
+        () =>
+            breadcrumbs.map((label, index) => ({
+                label,
+                onClick: index < breadcrumbs.length - 1 ? () => navigateToBreadcrumb(index) : undefined,
+            })),
+        [breadcrumbs, navigateToBreadcrumb]
+    );
+
     if (!isReady) {
         return (
             <div className="flex items-center justify-center h-screen bg-white">
@@ -335,174 +378,178 @@ function MermaidEditorContent() {
     const canNavigateUp = diagramStack.length > 0;
 
     return (
-        <div className="flex h-screen w-full flex-col overflow-hidden bg-white text-black">
-            <div className="flex items-center justify-between border-b-2 border-black bg-white px-4 py-2">
+        <div className="flex h-screen w-full flex-col overflow-hidden text-black">
+            <div className="flex items-center justify-between border-b-3 border-border bg-card px-4 py-3">
                 <div className="flex items-center gap-3">
-                    <button
+                    <Button
                         type="button"
                         onClick={navigateUp}
                         disabled={!canNavigateUp}
-                        className={cn(
-                            "border-2 border-black px-2 py-1 text-[10px] font-mono uppercase tracking-widest",
-                            canNavigateUp ? "bg-black text-white" : "cursor-not-allowed bg-white text-slate-400"
-                        )}
+                        size="sm"
+                        variant="solid"
+                        color="black"
                     >
                         Back
-                    </button>
-                    <div className="flex items-center gap-2 text-xs font-mono uppercase tracking-widest">
-                        {breadcrumbs.map((crumb, index) => (
-                            <span
-                                key={`${crumb}-${index}`}
-                                className={index === breadcrumbs.length - 1 ? "text-black" : "text-slate-500"}
-                            >
-                                {crumb}
-                                {index < breadcrumbs.length - 1 ? " /" : ""}
-                            </span>
-                        ))}
-                    </div>
+                    </Button>
+                    <Breadcrumbs items={breadcrumbItems} className="text-sm" />
                 </div>
-                <div className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                    {canNavigateUp ? "Nested diagram" : "Root diagram"}
+                <div className="flex items-center gap-2">
+                    <Badge variant="outline" color="gray" size="sm">
+                        {canNavigateUp ? "Nested diagram" : "Root diagram"}
+                    </Badge>
+                    <Badge variant="solid" color="blue" size="sm">
+                        Engine ready
+                    </Badge>
                 </div>
             </div>
 
             <div className="flex flex-1 overflow-hidden">
                 {/* Left Pane: Editor */}
-                <div className="w-1/3 min-w-[360px] border-r-2 border-black flex flex-col bg-white">
-                    <div className="p-3 border-b-2 border-black bg-black text-white font-mono text-xs uppercase tracking-widest flex justify-between items-center">
-                        <span>{currentTitle}.mmd+</span>
-                        <span className="bg-green-500 w-2 h-2 rounded-full"></span>
-                    </div>
-                    <textarea
-                        value={code}
-                        onChange={(e) => {
-                            editSourceRef.current = 'text';
-                            setCode(e.target.value);
-                        }}
-                        className="flex-1 w-full p-6 font-mono text-sm resize-none outline-none selection:bg-yellow-200"
-                        spellCheck={false}
-                        placeholder="graph TD..."
-                    />
-                    <div className="border-t-2 border-black bg-white">
-                        <div className="px-3 py-2 border-b-2 border-black bg-black text-white text-[10px] font-mono uppercase tracking-widest">
-                            Node Inspector
+                <div className="w-1/3 min-w-[360px] border-r-3 border-border bg-muted p-4 flex flex-col gap-4">
+                    <Card padding="none" shadow="sm" className="flex flex-1 flex-col overflow-hidden">
+                        <CardHeader className="border-b-3 border-border bg-primary text-primary-foreground px-4 py-3">
+                            <div className="flex items-center justify-between gap-2">
+                                <div className="text-xs font-mono uppercase tracking-widest">
+                                    {currentTitle}.mmd+
+                                </div>
+                                <Badge variant="outline" color="yellow" size="sm">
+                                    live
+                                </Badge>
+                            </div>
+                        </CardHeader>
+                        <CardContent className="flex-1 p-0 pt-0">
+                            <textarea
+                                value={code}
+                                onChange={(e) => {
+                                    editSourceRef.current = 'text';
+                                    setCode(e.target.value);
+                                }}
+                                className="h-full w-full resize-none bg-transparent p-4 font-mono text-sm outline-none selection:bg-yellow-200"
+                                spellCheck={false}
+                                placeholder="graph TD..."
+                            />
+                        </CardContent>
+                        <div className="border-t-3 border-border px-3 py-2 text-center text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                            Drag nodes on the right to update coordinates.
                         </div>
-                        {selectedNode ? (
-                            <div className="p-3 text-xs">
-                                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                                    <span>Mermaid ID</span>
-                                    <span className="truncate text-black">{selectedNode.data?.mermaidId}</span>
-                                    <span>UID</span>
-                                    <span className="truncate text-black">{selectedNode.id}</span>
-                                </div>
-                                <div className="mt-3">
-                                    <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                                        Kind
-                                    </label>
-                                    <select
-                                        value={selectedKind ?? ''}
-                                        onChange={(e) => {
-                                            const value = e.target.value || undefined;
-                                            updateSelectedNodeMeta({ kind: value });
-                                        }}
-                                        className="mt-1 w-full border-2 border-black bg-white px-2 py-1 text-xs font-mono"
-                                    >
-                                        <option value="">(unset)</option>
-                                        <option value="card">card</option>
-                                        <option value="note">note</option>
-                                        <option value="code">code</option>
-                                        <option value="media">media</option>
-                                        <option value="diagram">diagram</option>
-                                        <option value="markdown">markdown</option>
-                                        <option value="oembed">oembed</option>
-                                    </select>
-                                </div>
-                                {(selectedKind === 'diagram' || selectedDiagram?.mermaidman) && (
-                                    <div className="mt-4 border-t-2 border-black pt-3">
-                                        <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                                            Diagram Title
+                    </Card>
+
+                    <Card padding="none" shadow="sm" className="overflow-hidden">
+                        <CardHeader className="border-b-3 border-border px-4 py-3">
+                            <CardTitle className="text-base">Node Inspector</CardTitle>
+                            <CardDescription>
+                                {selectedNode
+                                    ? "Tune metadata for the selected node."
+                                    : "Select a node to edit metadata or open nested diagrams."}
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-4 p-4 pt-4">
+                            {selectedNode ? (
+                                <>
+                                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                                        <span>Mermaid ID</span>
+                                        <span className="truncate text-foreground">
+                                            {selectedNode.data?.mermaidId}
+                                        </span>
+                                        <span>UID</span>
+                                        <span className="truncate text-foreground">{selectedNode.id}</span>
+                                    </div>
+                                    <Divider label="Meta" />
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
+                                            Kind
                                         </label>
-                                        <input
-                                            value={selectedDiagram?.title ?? ''}
-                                            onChange={(e) =>
-                                                updateSelectedNodeMeta({ diagram: { title: e.target.value } })
-                                            }
-                                            className="mt-1 w-full border-2 border-black bg-white px-2 py-1 text-xs font-mono"
-                                            placeholder="Subflow"
-                                        />
-                                        <div className="mt-2 flex gap-2">
-                                            <button
-                                                type="button"
-                                                onClick={() =>
-                                                    selectedDiagram?.mermaidman && openNestedDiagram(selectedNode)
+                                        <select
+                                            value={selectedKind ?? ''}
+                                            onChange={(e) => {
+                                                const value = e.target.value || undefined;
+                                                updateSelectedNodeMeta({ kind: value });
+                                            }}
+                                            className="h-11 w-full border-3 border-border bg-card px-3 text-xs font-mono font-bold"
+                                        >
+                                            <option value="">(unset)</option>
+                                            <option value="card">card</option>
+                                            <option value="note">note</option>
+                                            <option value="code">code</option>
+                                            <option value="media">media</option>
+                                            <option value="diagram">diagram</option>
+                                            <option value="markdown">markdown</option>
+                                            <option value="oembed">oembed</option>
+                                        </select>
+                                    </div>
+                                    {(selectedKind === 'diagram' || selectedDiagram?.mermaidman) && (
+                                        <>
+                                            <Divider label="Nested Diagram" />
+                                            <Input
+                                                label="Diagram Title"
+                                                value={selectedDiagram?.title ?? ''}
+                                                onChange={(e) =>
+                                                    updateSelectedNodeMeta({ diagram: { title: e.target.value } })
                                                 }
-                                                disabled={!selectedDiagram?.mermaidman}
-                                                className={cn(
-                                                    "border-2 border-black px-2 py-1 text-[10px] font-mono uppercase tracking-widest",
-                                                    selectedDiagram?.mermaidman
-                                                        ? "bg-black text-white"
-                                                        : "cursor-not-allowed bg-white text-slate-400"
-                                                )}
-                                            >
-                                                Open
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => createAndOpenNestedDiagram(selectedNode)}
-                                                className="border-2 border-black bg-white px-2 py-1 text-[10px] font-mono uppercase tracking-widest"
-                                            >
-                                                Create + Open
-                                            </button>
-                                        </div>
-                                    </div>
-                                )}
-                                {(selectedKind === 'code' || selectedCode?.content || selectedCode?.language) && (
-                                    <div className="mt-4 border-t-2 border-black pt-3">
-                                        <label className="text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                                            Code Language
-                                        </label>
-                                        <input
-                                            value={selectedCode?.language ?? ''}
-                                            onChange={(e) =>
-                                                updateSelectedNodeMeta({
-                                                    kind: 'code',
-                                                    code: { language: e.target.value },
-                                                })
-                                            }
-                                            className="mt-1 w-full border-2 border-black bg-white px-2 py-1 text-xs font-mono"
-                                            placeholder="auto"
-                                        />
-                                        <label className="mt-3 block text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                                            Code Content
-                                        </label>
-                                        <textarea
-                                            value={selectedCode?.content ?? ''}
-                                            onChange={(e) =>
-                                                updateSelectedNodeMeta({
-                                                    kind: 'code',
-                                                    code: { content: e.target.value },
-                                                })
-                                            }
-                                            rows={4}
-                                            className="mt-1 w-full resize-none border-2 border-black bg-white px-2 py-1 text-xs font-mono"
-                                            placeholder="Paste code..."
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="p-3 text-[10px] font-mono uppercase tracking-widest text-slate-500">
-                                Select a node to edit metadata or open nested diagrams.
-                            </div>
-                        )}
-                    </div>
-                    <div className="p-2 border-t-2 border-black text-[10px] font-mono text-slate-500 text-center">
-                        Drag nodes on the right to update coordinates.
-                    </div>
+                                                size="sm"
+                                            />
+                                            <div className="flex flex-wrap gap-2">
+                                                <Button
+                                                    type="button"
+                                                    onClick={() =>
+                                                        selectedDiagram?.mermaidman &&
+                                                        openNestedDiagram(selectedNode)
+                                                    }
+                                                    disabled={!selectedDiagram?.mermaidman}
+                                                    size="sm"
+                                                    variant="solid"
+                                                    color="black"
+                                                >
+                                                    Open
+                                                </Button>
+                                                <Button
+                                                    type="button"
+                                                    onClick={() => createAndOpenNestedDiagram(selectedNode)}
+                                                    size="sm"
+                                                    variant="outline"
+                                                    color="black"
+                                                >
+                                                    Create + Open
+                                                </Button>
+                                            </div>
+                                        </>
+                                    )}
+                                    {(selectedKind === 'code' || selectedCode?.content || selectedCode?.language) && (
+                                        <>
+                                            <Divider label="Code Node" />
+                                            <Input
+                                                label="Code Language"
+                                                value={selectedCode?.language ?? ''}
+                                                onChange={(e) =>
+                                                    updateSelectedNodeMeta({
+                                                        kind: 'code',
+                                                        code: { language: e.target.value },
+                                                    })
+                                                }
+                                                size="sm"
+                                            />
+                                            <Textarea
+                                                label="Code Content"
+                                                value={selectedCode?.content ?? ''}
+                                                onChange={(e) =>
+                                                    updateSelectedNodeMeta({
+                                                        kind: 'code',
+                                                        code: { content: e.target.value },
+                                                    })
+                                                }
+                                                className="min-h-[120px] text-xs font-mono"
+                                                placeholder="Paste code..."
+                                            />
+                                        </>
+                                    )}
+                                </>
+                            ) : null}
+                        </CardContent>
+                    </Card>
                 </div>
 
                 {/* Right Pane: Canvas */}
-                <div className="flex-1 h-full bg-[#fafafa]">
+                <div className="flex-1 h-full bg-card">
                     <ReactFlow
                         nodes={nodes}
                         edges={edges}
