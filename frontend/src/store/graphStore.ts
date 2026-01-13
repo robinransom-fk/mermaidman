@@ -6,7 +6,7 @@ export type AliasMap = {
   uidToMermaidId: Record<UID, string>;
 };
 
-export type NodeKind = "card" | "note" | "code" | "media" | "markdown";
+export type NodeKind = "card" | "note" | "code" | "media" | "markdown" | "diagram" | "oembed";
 
 export type Node = {
   uid: UID;
