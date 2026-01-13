@@ -74,12 +74,19 @@ type MermaidNodeData = {
     kind?: string;
     diagramPreview?: string;
     codePreview?: string;
+    childItems?: string[];
+    childCount?: number;
+    onMetaChange?: (patch: Record<string, unknown>) => void;
+    onOpenNested?: () => void;
+    onCreateNested?: () => void;
 };
 
 function MermaidNode({ data, selected }: NodeProps<MermaidNodeData>) {
     const kind = data.kind ?? (typeof data.meta?.kind === 'string' ? data.meta?.kind : undefined);
     const hasDiagram = Boolean(data.meta?.diagram && typeof data.meta.diagram === 'object');
     const codePreview = data.codePreview;
+    const childItems = data.childItems ?? [];
+    const childCount = data.childCount ?? childItems.length;
 
     return (
         <div className="relative">
@@ -114,6 +121,23 @@ function MermaidNode({ data, selected }: NodeProps<MermaidNodeData>) {
                         {data.diagramPreview}
                     </div>
                 )}
+                {childItems.length > 0 && (
+                    <div className="mt-2 grid grid-cols-2 gap-2">
+                        {childItems.map((item) => (
+                            <div
+                                key={item}
+                                className="border-2 border-border bg-card px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide"
+                            >
+                                {item}
+                            </div>
+                        ))}
+                        {childCount > childItems.length && (
+                            <div className="border-2 border-border bg-muted px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+                                +{childCount - childItems.length} more
+                            </div>
+                        )}
+                    </div>
+                )}
                 {codePreview && (
                     <pre className="mt-2 max-h-28 overflow-hidden whitespace-pre-wrap border-2 border-border bg-black px-2 py-1 text-[10px] text-green-200">
                         {codePreview}
@@ -122,6 +146,85 @@ function MermaidNode({ data, selected }: NodeProps<MermaidNodeData>) {
                 {hasDiagram && (
                     <div className="mt-2 text-[9px] uppercase tracking-widest text-muted-foreground">
                         Double-click to open
+                    </div>
+                )}
+                <div className="mt-3 space-y-2">
+                    <label className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">
+                        Kind
+                    </label>
+                    <select
+                        value={kind ?? ''}
+                        onChange={(e) => {
+                            const value = e.target.value || undefined;
+                            data.onMetaChange?.({ kind: value });
+                        }}
+                        className="h-9 w-full border-3 border-border bg-card px-2 text-[10px] font-bold"
+                    >
+                        <option value="">(unset)</option>
+                        <option value="card">card</option>
+                        <option value="note">note</option>
+                        <option value="code">code</option>
+                        <option value="media">media</option>
+                        <option value="diagram">diagram</option>
+                        <option value="markdown">markdown</option>
+                        <option value="oembed">oembed</option>
+                    </select>
+                </div>
+                {(kind === 'diagram' || hasDiagram) && (
+                    <div className="mt-3 space-y-2">
+                        <Input
+                            value={(data.meta?.diagram as DiagramMeta | undefined)?.title ?? ''}
+                            onChange={(e) => data.onMetaChange?.({ diagram: { title: e.target.value } })}
+                            size="sm"
+                            placeholder="Diagram title"
+                        />
+                        <div className="flex flex-wrap gap-2">
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="solid"
+                                color="black"
+                                onClick={() => data.onOpenNested?.()}
+                                disabled={!data.meta?.diagram}
+                            >
+                                Open
+                            </Button>
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                color="black"
+                                onClick={() => data.onCreateNested?.()}
+                            >
+                                Create
+                            </Button>
+                        </div>
+                    </div>
+                )}
+                {(kind === 'code' || data.meta?.code) && (
+                    <div className="mt-3 space-y-2">
+                        <Input
+                            value={(data.meta?.code as CodeMeta | undefined)?.language ?? ''}
+                            onChange={(e) =>
+                                data.onMetaChange?.({
+                                    kind: 'code',
+                                    code: { language: e.target.value },
+                                })
+                            }
+                            size="sm"
+                            placeholder="language"
+                        />
+                        <Textarea
+                            value={(data.meta?.code as CodeMeta | undefined)?.content ?? ''}
+                            onChange={(e) =>
+                                data.onMetaChange?.({
+                                    kind: 'code',
+                                    code: { content: e.target.value },
+                                })
+                            }
+                            className="min-h-[90px] text-[10px] font-mono"
+                            placeholder="code..."
+                        />
                     </div>
                 )}
             </Card>
@@ -197,6 +300,8 @@ function MermaidEditorContent() {
                     const diagramSource =
                         diagram && typeof diagram.mermaidman === 'string' ? diagram.mermaidman : undefined;
                     let diagramPreview: string | undefined;
+                    let childItems: string[] | undefined;
+                    let childCount: number | undefined;
 
                     if (diagramSource) {
                         if (parse_mermaidman) {
@@ -205,6 +310,13 @@ function MermaidEditorContent() {
                                 const nodeCount = Array.isArray(nested?.nodes) ? nested.nodes.length : 0;
                                 const edgeCount = Array.isArray(nested?.edges) ? nested.edges.length : 0;
                                 diagramPreview = `${nodeCount} nodes, ${edgeCount} edges`;
+                                if (Array.isArray(nested?.nodes)) {
+                                    childCount = nested.nodes.length;
+                                    childItems = nested.nodes
+                                        .slice(0, 4)
+                                        .map((child: { label?: string; id?: string }) => child.label || child.id)
+                                        .filter(Boolean);
+                                }
                             } catch {
                                 diagramPreview = 'Nested diagram';
                             }
@@ -231,6 +343,14 @@ function MermaidEditorContent() {
                             kind,
                             diagramPreview,
                             codePreview,
+                            childItems,
+                            childCount,
+                            onMetaChange: (patch: Record<string, unknown>) =>
+                                applyNodePatch(n.mermaidId, patch),
+                            onOpenNested: () =>
+                                openNestedDiagram(n.label || n.mermaidId, n.mermaidId, diagram),
+                            onCreateNested: () =>
+                                createAndOpenNestedDiagram(n.label || n.mermaidId, n.mermaidId),
                         },
                     };
                 });
@@ -304,53 +424,62 @@ function MermaidEditorContent() {
         setCode(nextCode);
     }, [breadcrumbs.length, code, currentParentNodeId, currentTitle, diagramStack]);
 
-    const openNestedDiagram = useCallback((node: Node<MermaidNodeData>) => {
-        const meta = node.data?.meta;
-        const diagram = meta?.diagram as DiagramMeta | undefined;
-        if (!diagram?.mermaidman) return;
+    const openNestedDiagram = useCallback(
+        (nodeLabel: string | undefined, mermaidId: string, diagram?: DiagramMeta) => {
+            if (!diagram?.mermaidman) return;
 
-        const title = diagram.title || node.data?.label || node.data?.mermaidId || 'Nested';
-        setDiagramStack((prev) => [
-            ...prev,
-            { title: currentTitle, code, parentNodeId: currentParentNodeId },
-        ]);
-        setCurrentTitle(title);
-        setCurrentParentNodeId(node.data?.mermaidId ?? node.id);
-        setSelectedNodeId(null);
-        setCode(diagram.mermaidman);
-    }, [code, currentTitle, currentParentNodeId]);
+            const title = diagram.title || nodeLabel || mermaidId || 'Nested';
+            setDiagramStack((prev) => [
+                ...prev,
+                { title: currentTitle, code, parentNodeId: currentParentNodeId },
+            ]);
+            setCurrentTitle(title);
+            setCurrentParentNodeId(mermaidId);
+            setSelectedNodeId(null);
+            setCode(diagram.mermaidman);
+        },
+        [code, currentTitle, currentParentNodeId]
+    );
 
-    const createAndOpenNestedDiagram = useCallback((node: Node<MermaidNodeData>) => {
-        const mermaidId = node.data?.mermaidId ?? node.id;
-        const title = node.data?.label || mermaidId;
-        const seedDiagram = `graph TD\nA[${title}]\n`;
-        const updatedParent = upsertNodeDirective(code, mermaidId, {
-            kind: 'diagram',
-            diagram: { title, mermaidman: seedDiagram },
-        });
+    const createAndOpenNestedDiagram = useCallback(
+        (nodeLabel: string | undefined, mermaidId: string) => {
+            const title = nodeLabel || mermaidId;
+            const seedDiagram = `graph TD\nA[${title}]\n`;
+            const updatedParent = upsertNodeDirective(code, mermaidId, {
+                kind: 'diagram',
+                diagram: { title, mermaidman: seedDiagram },
+            });
 
-        setDiagramStack((prev) => [
-            ...prev,
-            { title: currentTitle, code: updatedParent, parentNodeId: currentParentNodeId },
-        ]);
-        setCurrentTitle(title);
-        setCurrentParentNodeId(mermaidId);
-        setSelectedNodeId(null);
-        setCode(seedDiagram);
-    }, [code, currentTitle, currentParentNodeId]);
+            setDiagramStack((prev) => [
+                ...prev,
+                { title: currentTitle, code: updatedParent, parentNodeId: currentParentNodeId },
+            ]);
+            setCurrentTitle(title);
+            setCurrentParentNodeId(mermaidId);
+            setSelectedNodeId(null);
+            setCode(seedDiagram);
+        },
+        [code, currentTitle, currentParentNodeId]
+    );
 
     const navigateUp = useCallback(() => {
         if (diagramStack.length === 0) return;
         navigateToBreadcrumb(diagramStack.length - 1);
     }, [diagramStack.length, navigateToBreadcrumb]);
 
-    const updateSelectedNodeMeta = useCallback((patch: Record<string, unknown>) => {
-        if (!selectedNode) return;
-        const mermaidId = selectedNode.data?.mermaidId ?? selectedNode.id;
-        const updated = upsertNodeDirective(code, mermaidId, patch);
+    const applyNodePatch = useCallback((mermaidId: string, patch: Record<string, unknown>) => {
         editSourceRef.current = 'text';
-        setCode(updated);
-    }, [selectedNode, code]);
+        setCode((prev) => upsertNodeDirective(prev, mermaidId, patch));
+    }, []);
+
+    const updateSelectedNodeMeta = useCallback(
+        (patch: Record<string, unknown>) => {
+            if (!selectedNode) return;
+            const mermaidId = selectedNode.data?.mermaidId ?? selectedNode.id;
+            applyNodePatch(mermaidId, patch);
+        },
+        [selectedNode, applyNodePatch]
+    );
 
     const selectedMeta = (selectedNode?.data?.meta ?? {}) as NodeMeta;
     const selectedKind =
@@ -493,7 +622,11 @@ function MermaidEditorContent() {
                                                     type="button"
                                                     onClick={() =>
                                                         selectedDiagram?.mermaidman &&
-                                                        openNestedDiagram(selectedNode)
+                                                        openNestedDiagram(
+                                                            selectedNode.data?.label,
+                                                            selectedNode.data?.mermaidId ?? selectedNode.id,
+                                                            selectedDiagram
+                                                        )
                                                     }
                                                     disabled={!selectedDiagram?.mermaidman}
                                                     size="sm"
@@ -504,7 +637,12 @@ function MermaidEditorContent() {
                                                 </Button>
                                                 <Button
                                                     type="button"
-                                                    onClick={() => createAndOpenNestedDiagram(selectedNode)}
+                                                    onClick={() =>
+                                                        createAndOpenNestedDiagram(
+                                                            selectedNode.data?.label,
+                                                            selectedNode.data?.mermaidId ?? selectedNode.id
+                                                        )
+                                                    }
                                                     size="sm"
                                                     variant="outline"
                                                     color="black"
@@ -558,7 +696,12 @@ function MermaidEditorContent() {
                         onEdgesChange={onEdgesChange}
                         onNodeDragStop={onNodeDragStop}
                         onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
-                        onNodeDoubleClick={(_event, node) => openNestedDiagram(node as Node<MermaidNodeData>)}
+                        onNodeDoubleClick={(_event, node) => {
+                            const data = (node as Node<MermaidNodeData>).data;
+                            if (data?.meta?.diagram) {
+                                openNestedDiagram(data.label, data.mermaidId, data.meta.diagram as DiagramMeta);
+                            }
+                        }}
                         onPaneClick={() => setSelectedNodeId(null)}
                         fitView
                     >
