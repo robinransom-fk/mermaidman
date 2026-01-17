@@ -13,13 +13,18 @@ import ReactFlow, {
     useNodesState,
     useEdgesState,
     ReactFlowProvider,
+    MarkerType,
 } from 'reactflow';
+import { MermaidNode } from './MermaidNode';
+import { type NodeMeta, type DiagramMeta, type CodeMeta, type MediaMeta, type MermaidNodeData } from '@/types/mermaid';
 import 'reactflow/dist/style.css';
 import { useMermaidEngine } from '@/hooks/useMermaidEngine';
 import { getLayoutedNodes } from '@/utils/layout';
 import { upsertNodeDirective } from '@/utils/mermaidman';
 import { cn } from '@/utils/cn';
 import { Badge } from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Badge';
+import { ProjectSidebar } from './ProjectSidebar';
+import { useFileStore } from '@/store/fileStore';
 import { Breadcrumbs, type BreadcrumbItem } from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Breadcrumbs';
 import { Button } from '@/components/radical-ai-studio-kit/radical-ai-studio-kit/ui/Button';
 import {
@@ -40,6 +45,7 @@ import {
     type GraphStore,
     type UID,
 } from '@/store/graphStore';
+import { exportToMermaid } from '@/utils/export';
 
 const INITIAL_CODE = `graph TD
 A[Start] --> B[Processing]
@@ -49,194 +55,63 @@ B --> C[End]
 %% @node: C { x: 500, y: 100 }
 `;
 
-type DiagramMeta = {
-    title?: string;
-    mermaidman?: string;
-};
-
-type CodeMeta = {
-    language?: string;
-    content?: string;
-};
-
-type NodeMeta = {
-    kind?: string;
-    diagram?: DiagramMeta;
-    code?: CodeMeta;
-    [key: string]: unknown;
-};
-
-type MermaidNodeData = {
-    label: string;
-    mermaidId: string;
-    hasPosition: boolean;
-    meta?: NodeMeta;
-    kind?: string;
-    diagramPreview?: string;
-    codePreview?: string;
-    childItems?: string[];
-    childCount?: number;
-    onMetaChange?: (patch: Record<string, unknown>) => void;
-    onOpenNested?: () => void;
-    onCreateNested?: () => void;
-};
-
-function MermaidNode({ data, selected }: NodeProps<MermaidNodeData>) {
-    const kind = data.kind ?? (typeof data.meta?.kind === 'string' ? data.meta?.kind : undefined);
-    const hasDiagram = Boolean(data.meta?.diagram && typeof data.meta.diagram === 'object');
-    const codePreview = data.codePreview;
-    const childItems = data.childItems ?? [];
-    const childCount = data.childCount ?? childItems.length;
-
-    return (
-        <div className="relative">
-            <Handle
-                type="target"
-                position={Position.Left}
-                className="!h-2 !w-2 !rounded-none !border-2 !border-black !bg-white"
-            />
-            <Handle
-                type="source"
-                position={Position.Right}
-                className="!h-2 !w-2 !rounded-none !border-2 !border-black !bg-black"
-            />
-            <Card
-                padding="sm"
-                shadow={selected ? "lg" : "sm"}
-                className={cn(
-                    "min-w-[160px] max-w-[260px] bg-card",
-                    selected ? "ring-2 ring-black ring-offset-2" : "ring-0"
-                )}
-            >
-                <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-black">{data.label}</div>
-                    {kind && (
-                        <Badge variant="outline" color="gray" size="sm">
-                            {kind}
-                        </Badge>
-                    )}
-                </div>
-                {data.diagramPreview && (
-                    <div className="mt-2 border-2 border-border bg-muted px-2 py-1 text-[10px] uppercase tracking-wide">
-                        {data.diagramPreview}
-                    </div>
-                )}
-                {childItems.length > 0 && (
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                        {childItems.map((item) => (
-                            <div
-                                key={item}
-                                className="border-2 border-border bg-card px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide"
-                            >
-                                {item}
-                            </div>
-                        ))}
-                        {childCount > childItems.length && (
-                            <div className="border-2 border-border bg-muted px-1.5 py-1 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
-                                +{childCount - childItems.length} more
-                            </div>
-                        )}
-                    </div>
-                )}
-                {codePreview && (
-                    <pre className="mt-2 max-h-28 overflow-hidden whitespace-pre-wrap border-2 border-border bg-black px-2 py-1 text-[10px] text-green-200">
-                        {codePreview}
-                    </pre>
-                )}
-                {hasDiagram && (
-                    <div className="mt-2 text-[9px] uppercase tracking-widest text-muted-foreground">
-                        Double-click to open
-                    </div>
-                )}
-                <div className="mt-3 space-y-2">
-                    <label className="text-[9px] font-mono uppercase tracking-widest text-muted-foreground">
-                        Kind
-                    </label>
-                    <select
-                        value={kind ?? ''}
-                        onChange={(e) => {
-                            const value = e.target.value || undefined;
-                            data.onMetaChange?.({ kind: value });
-                        }}
-                        className="h-9 w-full border-3 border-border bg-card px-2 text-[10px] font-bold"
-                    >
-                        <option value="">(unset)</option>
-                        <option value="card">card</option>
-                        <option value="note">note</option>
-                        <option value="code">code</option>
-                        <option value="media">media</option>
-                        <option value="diagram">diagram</option>
-                        <option value="markdown">markdown</option>
-                        <option value="oembed">oembed</option>
-                    </select>
-                </div>
-                {(kind === 'diagram' || hasDiagram) && (
-                    <div className="mt-3 space-y-2">
-                        <Input
-                            value={(data.meta?.diagram as DiagramMeta | undefined)?.title ?? ''}
-                            onChange={(e) => data.onMetaChange?.({ diagram: { title: e.target.value } })}
-                            size="sm"
-                            placeholder="Diagram title"
-                        />
-                        <div className="flex flex-wrap gap-2">
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="solid"
-                                color="black"
-                                onClick={() => data.onOpenNested?.()}
-                                disabled={!data.meta?.diagram}
-                            >
-                                Open
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                variant="outline"
-                                color="black"
-                                onClick={() => data.onCreateNested?.()}
-                            >
-                                Create
-                            </Button>
-                        </div>
-                    </div>
-                )}
-                {(kind === 'code' || data.meta?.code) && (
-                    <div className="mt-3 space-y-2">
-                        <Input
-                            value={(data.meta?.code as CodeMeta | undefined)?.language ?? ''}
-                            onChange={(e) =>
-                                data.onMetaChange?.({
-                                    kind: 'code',
-                                    code: { language: e.target.value },
-                                })
-                            }
-                            size="sm"
-                            placeholder="language"
-                        />
-                        <Textarea
-                            value={(data.meta?.code as CodeMeta | undefined)?.content ?? ''}
-                            onChange={(e) =>
-                                data.onMetaChange?.({
-                                    kind: 'code',
-                                    code: { content: e.target.value },
-                                })
-                            }
-                            className="min-h-[90px] text-[10px] font-mono"
-                            placeholder="code..."
-                        />
-                    </div>
-                )}
-            </Card>
-        </div>
-    );
-}
-
 const NODE_TYPES = { mermaidNode: MermaidNode };
 
 function MermaidEditorContent() {
     const { isReady, parse_mermaidman } = useMermaidEngine();
-    const [code, setCode] = useState(INITIAL_CODE);
+    const { files, activeFileId, updateFile, undo, redo, history } = useFileStore();
+    const activeFile = activeFileId ? files[activeFileId] : null;
+
+    // Local code state for the current view (root or nested)
+    const [code, setCode] = useState(activeFile?.content || '');
+
+    // Keyboard Shortcuts for Undo/Redo
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                    redo();
+                } else {
+                    undo();
+                }
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [undo, redo]);
+
+    // Sync 1: Reset view when switching files
+    useEffect(() => {
+        if (activeFileId && files[activeFileId]) {
+            setDiagramStack([]);
+            setCurrentTitle(files[activeFileId].title);
+            setCurrentParentNodeId(undefined);
+            // Content sync handled by effect below
+            setCode(files[activeFileId].content);
+        }
+    }, [activeFileId, files]);
+
+    // Sync 2: Handle external content updates (Undo/Redo)
+    useEffect(() => {
+        if (activeFileId && files[activeFileId] && diagramStack.length === 0) {
+            const storeContent = files[activeFileId].content;
+            // Only update local code if it differs from store (e.g. after Undo)
+            // AND we sort of trust that if we just typed it, code matches store.
+            if (code !== storeContent) {
+                setCode(storeContent);
+            }
+        }
+    }, [files, activeFileId, diagramStack.length]);
+
+    // Sync 3: Sync local changes back to store
+    useEffect(() => {
+        if (!activeFileId || diagramStack.length > 0) return;
+        if (files[activeFileId] && code !== files[activeFileId].content) {
+            updateFile(activeFileId, code);
+        }
+    }, [code, activeFileId, diagramStack.length, files]);
     const [nodes, setNodes, onNodesChange] = useNodesState([]);
     const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
@@ -334,7 +209,7 @@ function MermaidEditorContent() {
                     return {
                         id: n.uid,
                         type: 'mermaidNode',
-                        position: { x: hasPosition ? n.x : 0, y: hasPosition ? n.y : 0 },
+                        position: { x: hasPosition ? (n.x ?? 0) : 0, y: hasPosition ? (n.y ?? 0) : 0 },
                         data: {
                             label: n.label || n.mermaidId,
                             hasPosition,
@@ -361,7 +236,11 @@ function MermaidEditorContent() {
                     target: e.target,
                     label: e.label,
                     type: 'smoothstep',
-                    style: { stroke: '#000', strokeWidth: 2 },
+                    style: { stroke: '#94a3b8', strokeWidth: 1.5 },
+                    markerEnd: {
+                        type: MarkerType.ArrowClosed,
+                        color: '#94a3b8',
+                    },
                 }));
 
                 const layoutedNodes = getLayoutedNodes(flowNodes, flowEdges);
@@ -486,6 +365,8 @@ function MermaidEditorContent() {
         typeof selectedMeta.kind === 'string' ? selectedMeta.kind : selectedNode?.data?.kind;
     const selectedDiagram = selectedMeta.diagram as DiagramMeta | undefined;
     const selectedCode = selectedMeta.code as CodeMeta | undefined;
+    const selectedMedia = selectedMeta.media as MediaMeta | undefined;
+    const selectedMarkdown = selectedMeta.markdown as string | undefined;
 
     const breadcrumbItems = useMemo<BreadcrumbItem[]>(
         () =>
@@ -507,209 +388,247 @@ function MermaidEditorContent() {
     const canNavigateUp = diagramStack.length > 0;
 
     return (
-        <div className="flex h-screen w-full flex-col overflow-hidden text-black">
-            <div className="flex items-center justify-between border-b-3 border-border bg-card px-4 py-3">
-                <div className="flex items-center gap-3">
+        <div className="relative h-screen w-full overflow-hidden bg-background text-foreground font-sans">
+            <ProjectSidebar />
+            {/* Top Bar (Floating) */}
+            <div className="absolute top-4 left-4 right-4 z-50 flex items-center justify-between pointer-events-none">
+                <div className="pointer-events-auto flex items-center gap-2 panel-base px-4 py-2">
                     <Button
                         type="button"
                         onClick={navigateUp}
                         disabled={!canNavigateUp}
                         size="sm"
-                        variant="solid"
+                        variant="ghost"
                         color="black"
+                        className="!p-1"
                     >
-                        Back
+                        ←
                     </Button>
-                    <Breadcrumbs items={breadcrumbItems} className="text-sm" />
-                </div>
-                <div className="flex items-center gap-2">
-                    <Badge variant="outline" color="gray" size="sm">
-                        {canNavigateUp ? "Nested diagram" : "Root diagram"}
-                    </Badge>
-                    <Badge variant="solid" color="blue" size="sm">
-                        Engine ready
+                    <Breadcrumbs items={breadcrumbItems} className="text-sm font-medium" />
+                    <div className="h-4 w-[1px] bg-border mx-2" />
+                    <Badge variant="outline" color="blue" size="sm">
+                        {canNavigateUp ? "Sub-graph" : "Root"}
                     </Badge>
                 </div>
-            </div>
 
-            <div className="flex flex-1 overflow-hidden">
-                {/* Left Pane: Editor */}
-                <div className="w-1/3 min-w-[360px] border-r-3 border-border bg-muted p-4 flex flex-col gap-4">
-                    <Card padding="none" shadow="sm" className="flex flex-1 flex-col overflow-hidden">
-                        <CardHeader className="border-b-3 border-border bg-primary text-primary-foreground px-4 py-3">
-                            <div className="flex items-center justify-between gap-2">
-                                <div className="text-xs font-mono uppercase tracking-widest">
-                                    {currentTitle}.mmd+
-                                </div>
-                                <Badge variant="outline" color="yellow" size="sm">
-                                    live
-                                </Badge>
-                            </div>
-                        </CardHeader>
-                        <CardContent className="flex-1 p-0 pt-0">
-                            <textarea
-                                value={code}
-                                onChange={(e) => {
-                                    editSourceRef.current = 'text';
-                                    setCode(e.target.value);
-                                }}
-                                className="h-full w-full resize-none bg-transparent p-4 font-mono text-sm outline-none selection:bg-yellow-200"
-                                spellCheck={false}
-                                placeholder="graph TD..."
-                            />
-                        </CardContent>
-                        <div className="border-t-3 border-border px-3 py-2 text-center text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                            Drag nodes on the right to update coordinates.
-                        </div>
-                    </Card>
-
-                    <Card padding="none" shadow="sm" className="overflow-hidden">
-                        <CardHeader className="border-b-3 border-border px-4 py-3">
-                            <CardTitle className="text-base">Node Inspector</CardTitle>
-                            <CardDescription>
-                                {selectedNode
-                                    ? "Tune metadata for the selected node."
-                                    : "Select a node to edit metadata or open nested diagrams."}
-                            </CardDescription>
-                        </CardHeader>
-                        <CardContent className="space-y-4 p-4 pt-4">
-                            {selectedNode ? (
-                                <>
-                                    <div className="grid grid-cols-2 gap-2 text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                                        <span>Mermaid ID</span>
-                                        <span className="truncate text-foreground">
-                                            {selectedNode.data?.mermaidId}
-                                        </span>
-                                        <span>UID</span>
-                                        <span className="truncate text-foreground">{selectedNode.id}</span>
-                                    </div>
-                                    <Divider label="Meta" />
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-                                            Kind
-                                        </label>
-                                        <select
-                                            value={selectedKind ?? ''}
-                                            onChange={(e) => {
-                                                const value = e.target.value || undefined;
-                                                updateSelectedNodeMeta({ kind: value });
-                                            }}
-                                            className="h-11 w-full border-3 border-border bg-card px-3 text-xs font-mono font-bold"
-                                        >
-                                            <option value="">(unset)</option>
-                                            <option value="card">card</option>
-                                            <option value="note">note</option>
-                                            <option value="code">code</option>
-                                            <option value="media">media</option>
-                                            <option value="diagram">diagram</option>
-                                            <option value="markdown">markdown</option>
-                                            <option value="oembed">oembed</option>
-                                        </select>
-                                    </div>
-                                    {(selectedKind === 'diagram' || selectedDiagram?.mermaidman) && (
-                                        <>
-                                            <Divider label="Nested Diagram" />
-                                            <Input
-                                                label="Diagram Title"
-                                                value={selectedDiagram?.title ?? ''}
-                                                onChange={(e) =>
-                                                    updateSelectedNodeMeta({ diagram: { title: e.target.value } })
-                                                }
-                                                size="sm"
-                                            />
-                                            <div className="flex flex-wrap gap-2">
-                                                <Button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        selectedDiagram?.mermaidman &&
-                                                        openNestedDiagram(
-                                                            selectedNode.data?.label,
-                                                            selectedNode.data?.mermaidId ?? selectedNode.id,
-                                                            selectedDiagram
-                                                        )
-                                                    }
-                                                    disabled={!selectedDiagram?.mermaidman}
-                                                    size="sm"
-                                                    variant="solid"
-                                                    color="black"
-                                                >
-                                                    Open
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        createAndOpenNestedDiagram(
-                                                            selectedNode.data?.label,
-                                                            selectedNode.data?.mermaidId ?? selectedNode.id
-                                                        )
-                                                    }
-                                                    size="sm"
-                                                    variant="outline"
-                                                    color="black"
-                                                >
-                                                    Create + Open
-                                                </Button>
-                                            </div>
-                                        </>
-                                    )}
-                                    {(selectedKind === 'code' || selectedCode?.content || selectedCode?.language) && (
-                                        <>
-                                            <Divider label="Code Node" />
-                                            <Input
-                                                label="Code Language"
-                                                value={selectedCode?.language ?? ''}
-                                                onChange={(e) =>
-                                                    updateSelectedNodeMeta({
-                                                        kind: 'code',
-                                                        code: { language: e.target.value },
-                                                    })
-                                                }
-                                                size="sm"
-                                            />
-                                            <Textarea
-                                                label="Code Content"
-                                                value={selectedCode?.content ?? ''}
-                                                onChange={(e) =>
-                                                    updateSelectedNodeMeta({
-                                                        kind: 'code',
-                                                        code: { content: e.target.value },
-                                                    })
-                                                }
-                                                className="min-h-[120px] text-xs font-mono"
-                                                placeholder="Paste code..."
-                                            />
-                                        </>
-                                    )}
-                                </>
-                            ) : null}
-                        </CardContent>
-                    </Card>
-                </div>
-
-                {/* Right Pane: Canvas */}
-                <div className="flex-1 h-full bg-card">
-                    <ReactFlow
-                        nodes={nodes}
-                        edges={edges}
-                        nodeTypes={NODE_TYPES}
-                        onNodesChange={onNodesChange}
-                        onEdgesChange={onEdgesChange}
-                        onNodeDragStop={onNodeDragStop}
-                        onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
-                        onNodeDoubleClick={(_event, node) => {
-                            const data = (node as Node<MermaidNodeData>).data;
-                            if (data?.meta?.diagram) {
-                                openNestedDiagram(data.label, data.mermaidId, data.meta.diagram as DiagramMeta);
-                            }
-                        }}
-                        onPaneClick={() => setSelectedNodeId(null)}
-                        fitView
+                <div className="pointer-events-auto flex items-center gap-2 panel-base px-2 py-2">
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={undo}
+                        disabled={!activeFileId || !history[activeFileId]?.past?.length}
+                        title="Undo (Ctrl+Z)"
                     >
-                        <Background color="#000" gap={25} size={1} variant={BackgroundVariant.Dots} />
-                        <Controls className="!bg-white !border-2 !border-black !shadow-none" />
-                    </ReactFlow>
+                        ↶
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={redo}
+                        disabled={!activeFileId || !history[activeFileId]?.future?.length}
+                        title="Redo (Ctrl+Shift+Z)"
+                    >
+                        ↷
+                    </Button>
+                    <div className="h-4 w-[1px] bg-border mx-1" />
+                    <Button size="sm" variant="ghost">Share</Button>
+                    <Button size="sm" variant="solid" color="blue" onClick={() => {
+                        const content = exportToMermaid(files);
+                        const blob = new Blob([content], { type: 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `${activeFile?.title || 'diagram'}.mmd`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    }}>Export</Button>
                 </div>
             </div>
+
+            {/* Main Canvas */}
+            <div className="absolute inset-0 z-0 bg-background canvas-grid">
+                <ReactFlow
+                    nodes={nodes}
+                    edges={edges}
+                    nodeTypes={NODE_TYPES}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onNodeDragStop={onNodeDragStop}
+                    onNodeClick={(_event, node) => setSelectedNodeId(node.id)}
+                    onNodeDoubleClick={(_event, node) => {
+                        const data = (node as Node<MermaidNodeData>).data;
+                        if (data?.meta?.diagram) {
+                            openNestedDiagram(data.label, data.mermaidId, data.meta.diagram as DiagramMeta);
+                        }
+                    }}
+                    onPaneClick={() => setSelectedNodeId(null)}
+                    fitView
+                    minZoom={0.1}
+                    maxZoom={4}
+                >
+                    <Background color="var(--color-canvas-dot)" gap={20} size={1} variant={BackgroundVariant.Dots} />
+                    <Controls className="!m-4 !panel-base !border-none !text-foreground !fill-foreground" />
+                </ReactFlow>
+            </div>
+
+            {/* Bottom Toolbar (Floating) */}
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto">
+                <div className="panel-base px-2 py-2 flex items-center gap-1">
+                    <Button variant="ghost" size="icon" className="rounded-md hover:bg-muted" title="Select (V)">
+                        <span className="text-lg">Pointer</span>
+                    </Button>
+                    <div className="h-6 w-[1px] bg-border mx-1" />
+                    <Button variant="ghost" size="icon" className="rounded-md hover:bg-muted" title="Rectangle (R)">
+                        <span className="text-lg">□</span>
+                    </Button>
+                    <Button variant="ghost" size="icon" className="rounded-md hover:bg-muted" title="Text (T)">
+                        <span className="text-lg">T</span>
+                    </Button>
+                    <Button variant="ghost" size="icon" className="rounded-md hover:bg-muted" title="Connect (C)">
+                        <span className="text-lg">↝</span>
+                    </Button>
+                </div>
+            </div>
+
+            {/* Left Drawer (Code) - Collapsible/Floating */}
+            <div className="absolute top-20 left-4 bottom-20 z-40 pointer-events-auto w-[350px] flex flex-col gap-2 transition-transform duration-200">
+                <Card padding="none" className="flex-1 flex flex-col shadow-overlay border-border/50 bg-card/95 backdrop-blur-xl">
+                    <CardHeader className="border-b border-border px-4 py-3 flex flex-row items-center justify-between">
+                        <div className="text-sm font-semibold tracking-tight">Source</div>
+                        <Badge variant="outline" size="sm" className="font-mono text-[10px]">{isReady ? 'WASM Ready' : 'Loading...'}</Badge>
+                    </CardHeader>
+                    <CardContent className="flex-1 p-0 relative group">
+                        <textarea
+                            value={code}
+                            onChange={(e) => {
+                                editSourceRef.current = 'text';
+                                setCode(e.target.value);
+                            }}
+                            className="absolute inset-0 w-full h-full resize-none bg-transparent p-4 font-mono text-xs leading-relaxed outline-none text-foreground/90 selection:bg-primary/20"
+                            spellCheck={false}
+                            placeholder="graph TD..."
+                        />
+                    </CardContent>
+                </Card>
+            </div>
+
+            {/* Right Panel (Inspector) - Context Aware */}
+            {selectedNode && (
+                <div className="absolute top-20 right-4 w-[300px] z-40 pointer-events-auto animate-in slide-in-from-right-4 fade-in duration-200">
+                    <Card padding="none" className="shadow-overlay border-border/50 bg-card/95 backdrop-blur-xl">
+                        <CardHeader className="border-b border-border px-4 py-3">
+                            <CardTitle className="text-sm font-semibold">Properties</CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-4 space-y-4 max-h-[calc(100vh-200px)] overflow-y-auto">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                                    <span>ID</span>
+                                    <span className="font-mono text-foreground truncate text-right">{selectedNode?.data?.mermaidId}</span>
+                                </div>
+                                <Divider />
+                                <div className="space-y-2">
+                                    <label className="text-xs font-medium text-muted-foreground">Type</label>
+                                    <select
+                                        value={selectedKind ?? ''}
+                                        onChange={(e) => {
+                                            const value = e.target.value || undefined;
+                                            updateSelectedNodeMeta({ kind: value });
+                                        }}
+                                        className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs focus:ring-1 focus:ring-ring"
+                                    >
+                                        <option value="">Default</option>
+                                        <option value="card">Card</option>
+                                        <option value="note">Note</option>
+                                        <option value="code">Code Block</option>
+                                        <option value="markdown">Markdown</option>
+                                        <option value="media">Image</option>
+                                        <option value="oembed">Embed/Video</option>
+                                        <option value="diagram">Nested Diagram</option>
+                                        <option value="text">Text</option>
+                                        <option value="image">Image</option>
+                                        <option value="embed">Embed</option>
+                                    </select>
+                                </div>
+
+                                {/* Dynamic Inspector Content based on Kind */}
+                                {selectedKind === 'markdown' && (
+                                    <div className="space-y-3 pt-2">
+                                        <label className="text-xs font-medium text-muted-foreground">Markdown Content</label>
+                                        <Textarea
+                                            value={selectedMarkdown ?? ''}
+                                            onChange={(e) =>
+                                                updateSelectedNodeMeta({ kind: 'markdown', markdown: e.target.value })
+                                            }
+                                            className="min-h-[120px] text-xs font-mono"
+                                            placeholder="# Heading&#10;Content..."
+                                        />
+                                    </div>
+                                )}
+
+                                {(selectedKind === 'media' || selectedKind === 'oembed') && (
+                                    <div className="space-y-3 pt-2">
+                                        <label className="text-xs font-medium text-muted-foreground">Source URL</label>
+                                        <Input
+                                            value={selectedMedia?.src ?? ''}
+                                            onChange={(e) =>
+                                                updateSelectedNodeMeta({
+                                                    kind: selectedKind,
+                                                    media: { ...selectedMedia, src: e.target.value }
+                                                })
+                                            }
+                                            size="sm"
+                                            placeholder="https://..."
+                                            className="h-8 text-xs font-mono"
+                                        />
+                                        <label className="text-xs font-medium text-muted-foreground">Alt Text / Title</label>
+                                        <Input
+                                            value={selectedMedia?.alt ?? ''}
+                                            onChange={(e) =>
+                                                updateSelectedNodeMeta({
+                                                    kind: selectedKind,
+                                                    media: { ...selectedMedia, alt: e.target.value }
+                                                })
+                                            }
+                                            size="sm"
+                                            placeholder="Description..."
+                                            className="h-8 text-xs"
+                                        />
+                                    </div>
+                                )}
+                                {(selectedKind === 'diagram' || selectedDiagram?.mermaidman) && (
+                                    <div className="space-y-3 pt-2">
+                                        <label className="text-xs font-medium text-muted-foreground">Diagram Settings</label>
+                                        <Input
+                                            value={selectedDiagram?.title ?? ''}
+                                            onChange={(e) => updateSelectedNodeMeta({ diagram: { title: e.target.value } })}
+                                            size="sm"
+                                            placeholder="Title"
+                                            className="h-8 text-xs"
+                                        />
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => selectedDiagram?.mermaidman && openNestedDiagram(selectedNode?.data?.label, selectedNode?.data?.mermaidId ?? selectedNode?.id, selectedDiagram)}
+                                                disabled={!selectedDiagram?.mermaidman}
+                                            >
+                                                Open
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => createAndOpenNestedDiagram(selectedNode?.data?.label, selectedNode?.data?.mermaidId ?? selectedNode?.id)}
+                                            >
+                                                New
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 }
